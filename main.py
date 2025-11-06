@@ -9,15 +9,19 @@ class TooltipLabel(ctk.CTkLabel):
         self.tooltip_text = tooltip_text
         self.tooltip = None
         self.hide_job = None
+        self.check_job = None
         
-        self.bind("<Enter>", self.show_tooltip)
-        self.bind("<Leave>", self.schedule_hide_tooltip)
+        #self.bind("<Enter>", self.show_tooltip)
+        #self.bind("<Leave>", self.schedule_hide_tooltip)
     
     def show_tooltip(self, event):
-        # Annuler la disparition programmée si on revient sur l'élément
+        # Annuler les jobs programmés
         if self.hide_job:
             self.after_cancel(self.hide_job)
             self.hide_job = None
+        if self.check_job:
+            self.after_cancel(self.check_job)
+            self.check_job = None
         
         if self.tooltip_text and not self.tooltip:
             x = self.winfo_rootx() + 20
@@ -36,10 +40,34 @@ class TooltipLabel(ctk.CTkLabel):
                 pady=5
             )
             label.pack()
+            
+            # Démarrer la vérification de la position de la souris
+            self.check_mouse_position()
+    
+    def check_mouse_position(self):
+        """Vérifie si la souris est toujours sur le label"""
+        if self.tooltip:
+            # Récupérer la position de la souris
+            x, y = self.winfo_pointerxy()
+            # Récupérer les coordonnées du label
+            label_x = self.winfo_rootx()
+            label_y = self.winfo_rooty()
+            label_width = self.winfo_width()
+            label_height = self.winfo_height()
+            
+            # Vérifier si la souris est sur le label
+            if not (label_x <= x <= label_x + label_width and 
+                    label_y <= y <= label_y + label_height):
+                # La souris n'est plus sur le label, programmer la disparition
+                if not self.hide_job:
+                    self.hide_job = self.after(150, self.hide_tooltip_now)
+            else:
+                # La souris est toujours sur le label, vérifier à nouveau
+                self.check_job = self.after(50, self.check_mouse_position)
     
     def schedule_hide_tooltip(self, event):
-        """Programme la disparition du tooltip après 1 seconde"""
-        if self.tooltip:
+        """Programme la disparition du tooltip après 150ms"""
+        if self.tooltip and not self.hide_job:
             self.hide_job = self.after(150, self.hide_tooltip_now)
     
     def hide_tooltip_now(self):
@@ -47,6 +75,9 @@ class TooltipLabel(ctk.CTkLabel):
         if self.tooltip:
             self.tooltip.destroy()
             self.tooltip = None
+        if self.check_job:
+            self.after_cancel(self.check_job)
+            self.check_job = None
         self.hide_job = None
 
 
@@ -205,7 +236,7 @@ class RevisionApp(ctk.CTk):
         super().__init__()
         
         # Configuration de la fenêtre
-        self.title("Gestionnaire de Priorités de Révision")
+        self.title("📚 Gestionnaire de Priorités de Révision")
         self.geometry("1000x750")
         
         # Thème
@@ -225,7 +256,7 @@ class RevisionApp(ctk.CTk):
         
         title = ctk.CTkLabel(
             header,
-            text="Gestionnaire de Priorités de Révision",
+            text="📚 Gestionnaire de Priorités de Révision",
             font=("Roboto", 28, "bold")
         )
         title.pack()
@@ -239,7 +270,7 @@ class RevisionApp(ctk.CTk):
         subtitle.pack(pady=(5, 0))
         
         # Frame de saisie (scrollable)
-        self.scroll_frame = ctk.CTkScrollableFrame(self, label_text="Vos UE à réviser")
+        self.scroll_frame = ctk.CTkScrollableFrame(self, label_text="📝 Vos UE à réviser")
         self.scroll_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
         # Nombre d'UE et heures disponibles
@@ -292,7 +323,7 @@ class RevisionApp(ctk.CTk):
         # Bouton de calcul
         calc_btn = ctk.CTkButton(
             self,
-            text="Calculer les priorités",
+            text="🎯 Calculer les priorités",
             command=self.calculer_priorites,
             height=40,
             font=("Roboto", 14, "bold")
