@@ -674,6 +674,6 @@ if __name__ == "__main__":
     app.mainloop()
     
 #TODO 
-        """
-        ajouter une répartition en jours et ajouts de pause visibles dans le planning peut etre mieux à voir
-        """
+"""
+ajouter une répartition en jours et ajouts de pause visibles dans le planning peut etre mieux à voir
+"""
