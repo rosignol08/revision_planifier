@@ -11,8 +11,8 @@ class TooltipLabel(ctk.CTkLabel):
         self.hide_job = None
         self.check_job = None
         
-        #self.bind("<Enter>", self.show_tooltip)
-        #self.bind("<Leave>", self.schedule_hide_tooltip)
+        self.bind("<Enter>", self.show_tooltip)
+        self.bind("<Leave>", self.schedule_hide_tooltip)
     
     def show_tooltip(self, event):
         # Annuler les jobs programmés
@@ -207,7 +207,7 @@ class ResultFrame(ctk.CTkFrame):
         # Heures recommandées
         heures_label = ctk.CTkLabel(
             self,
-            text=f"⏱️  {ue_data['heures_recommandees']}h recommandées",
+            text=f"⏱️  {int(ue_data['heures_recommandees'])}h recommandées",
             font=("Roboto", 12, "bold"),
             text_color="white"
         )
@@ -361,23 +361,25 @@ class RevisionApp(ctk.CTk):
     def repartir_heures(self, ue_liste, heures_totales):
         """Répartit les heures proportionnellement aux scores de priorité"""
         somme_priorites = sum(ue['priorite'] for ue in ue_liste)
+        temps_supplementaire = 0
         
         if somme_priorites == 0:
             # Si toutes les priorités sont à 0, répartir équitablement
             heures_par_ue = heures_totales / len(ue_liste)
             for ue in ue_liste:
-                ue['heures_recommandees'] = round(heures_par_ue, 1)
+                heures_exactes = heures_par_ue
+                heures_arrondies = math.ceil(heures_exactes)
+                ue['heures_recommandees'] = heures_arrondies
+                temps_supplementaire += (heures_arrondies - heures_exactes)
         else:
             # Répartir proportionnellement aux priorités
-            heures_restantes = heures_totales
-            for i, ue in enumerate(ue_liste):
-                if i == len(ue_liste) - 1:
-                    # Dernière UE : lui donner ce qui reste pour éviter les erreurs d'arrondi
-                    ue['heures_recommandees'] = round(heures_restantes, 1)
-                else:
-                    heures = (ue['priorite'] / somme_priorites) * heures_totales
-                    ue['heures_recommandees'] = round(heures, 1)
-                    heures_restantes -= ue['heures_recommandees']
+            for ue in ue_liste:
+                heures_exactes = (ue['priorite'] / somme_priorites) * heures_totales
+                heures_arrondies = math.ceil(heures_exactes)
+                ue['heures_recommandees'] = heures_arrondies
+                temps_supplementaire += (heures_arrondies - heures_exactes)
+        
+        return round(temps_supplementaire, 1)
     
     def calculer_priorites(self):
         """Calcule et affiche les priorités"""
@@ -400,20 +402,20 @@ class RevisionApp(ctk.CTk):
             # Trier par priorité
             ue_liste_triee = sorted(ue_liste, key=lambda x: x['priorite'], reverse=True)
             
-            # Répartir les heures
-            self.repartir_heures(ue_liste_triee, heures_totales)
+            # Répartir les heures et récupérer le temps supplémentaire
+            temps_supplementaire = self.repartir_heures(ue_liste_triee, heures_totales)
             
             # Ajouter le rang
             for i, ue in enumerate(ue_liste_triee, 1):
                 ue['rang'] = i
             
             # Afficher les résultats
-            self.afficher_resultats(ue_liste_triee, heures_totales)
+            self.afficher_resultats(ue_liste_triee, heures_totales, temps_supplementaire)
             
         except ValueError as e:
             messagebox.showerror("Erreur de saisie", str(e))
     
-    def afficher_resultats(self, ue_liste, heures_totales):
+    def afficher_resultats(self, ue_liste, heures_totales, temps_supplementaire):
         """Affiche les résultats dans une nouvelle fenêtre"""
         result_window = ctk.CTkToplevel(self)
         result_window.title("🎯 Résultats - Priorités de Révision")
@@ -441,11 +443,12 @@ class RevisionApp(ctk.CTk):
         )
         legende.pack(side="left", padx=10)
         
+        heures_reelles = int(heures_totales + temps_supplementaire)
         total_heures = ctk.CTkLabel(
             info_frame,
-            text=f"⏱️  Total: {heures_totales}h de révision",
+            text=f"⏱️  Prévu: {int(heures_totales)}h → Réel: {heures_reelles}h (+{temps_supplementaire}h)",
             font=("Roboto", 11, "bold"),
-            text_color="gray"
+            text_color=("#d97706", "#f59e0b")  # Orange
         )
         total_heures.pack(side="left", padx=10)
         
@@ -474,9 +477,10 @@ class RevisionApp(ctk.CTk):
         
         conseil_text = ctk.CTkLabel(
             conseil_frame,
-            text="Concentrez votre temps de révision sur les UE en rouge/orange (scores élevés).\n"
-                 "Les heures sont réparties proportionnellement à l'importance de chaque UE.\n"
-                 "N'oubliez pas de faire des pauses régulières ! 🎓",
+            text=f"Concentrez votre temps de révision sur les UE en rouge/orange (scores élevés).\n"
+                 f"Les heures sont arrondies au supérieur pour chaque UE.\n"
+                 f"⚠️ Temps supplémentaire nécessaire : +{temps_supplementaire}h (dû aux arrondis)\n"
+                 f"N'oubliez pas de faire des pauses régulières ! 🎓",
             font=("Roboto", 11),
             justify="left"
         )
