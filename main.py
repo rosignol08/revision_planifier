@@ -1,6 +1,7 @@
 import customtkinter as ctk
 from tkinter import messagebox
 import math
+import random
 
 class TooltipLabel(ctk.CTkLabel):
     """Label personnalisé avec tooltip au survol"""
@@ -144,6 +145,16 @@ class UEFrame(ctk.CTkFrame):
         """Récupère les données de l'UE"""
         try:
             nom = self.entry_nom.get().strip()
+            # Vérifier les doublons (insensible à la casse) parmi les autres UE de l'application
+            app_root = self.winfo_toplevel()
+            ue_frames = getattr(app_root, "ue_frames", None)
+            if ue_frames:
+                for frame in ue_frames:
+                    if frame is not self:
+                        other_nom = frame.entry_nom.get().strip()
+                        if other_nom and nom and other_nom.lower() == nom.lower():
+                            raise ValueError(f"Le nom '{nom}' est dupliqué (UE {frame.numero} et UE {self.numero})")
+            
             if not nom:
                 raise ValueError(f"Le nom de l'UE {self.numero} est vide")
             
@@ -168,11 +179,11 @@ class UEFrame(ctk.CTkFrame):
 
 class ResultFrame(ctk.CTkFrame):
     """Frame pour afficher un résultat d'UE"""
-    def __init__(self, master, ue_data, max_priorite, **kwargs):
+    def __init__(self, master, ue_data, max_priorite, min_priorite, **kwargs):
         super().__init__(master, **kwargs)
         
-        # Calcul de la couleur en fonction de la priorité
-        couleur = self.get_color_for_priority(ue_data['priorite'], max_priorite)
+        # Calcul de la couleur en fonction de la priorité (utilise min et max réels)
+        couleur = self.get_color_for_priority(ue_data['priorite'], max_priorite, min_priorite)
         self.configure(fg_color=couleur, corner_radius=10)
         
         # Rang
@@ -216,12 +227,13 @@ class ResultFrame(ctk.CTkFrame):
         # Configuration de la grille
         self.grid_columnconfigure(1, weight=1)
     
-    def get_color_for_priority(self, priorite, max_priorite):
+    def get_color_for_priority(self, priorite, max_priorite, min_priorite):
         """Calcule la couleur en fonction de la priorité (bleu → rouge)"""
-        if max_priorite == 0:
-            ratio = 0
+        if max_priorite == min_priorite:
+            ratio = 0.5  # Si toutes les priorités sont égales, couleur moyenne
         else:
-            ratio = priorite / max_priorite
+            # Normaliser entre 0 et 1 en fonction du min et max RÉELS
+            ratio = (priorite - min_priorite) / (max_priorite - min_priorite)
         
         # Interpolation de bleu (#2E86AB) à rouge foncé (#A4031F)
         r = int(46 + (164 - 46) * ratio)
@@ -479,12 +491,16 @@ class RevisionApp(ctk.CTk):
         
         # Conteneur pour les sessions
         sessions_container = ctk.CTkFrame(planning_frame, fg_color="transparent")
-        sessions_container.pack(fill="x", padx=15, pady=(0, 15))
+        sessions_container.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        
+        # Configuration de la grille pour qu'elle s'adapte à la largeur
+        for i in range(6):  # Max 6 colonnes
+            sessions_container.grid_columnconfigure(i, weight=1, uniform="session")
         
         # Afficher les sessions par colonnes
         current_row = 0
         current_col = 0
-        max_cols = 4
+        max_cols = 6  # Augmenté pour profiter de l'espace
         
         for i, session in enumerate(planning):
             ue_nom = session['ue_nom']
@@ -495,7 +511,6 @@ class RevisionApp(ctk.CTk):
                 sessions_container,
                 fg_color=couleur,
                 corner_radius=8,
-                width=250,
                 height=60
             )
             session_frame.grid(row=current_row, column=current_col, padx=5, pady=5, sticky="ew")
@@ -530,8 +545,9 @@ class RevisionApp(ctk.CTk):
                 current_col = 0
                 current_row += 1
         
-        # Trouver la priorité max
+        # Trouver la priorité max et min
         max_priorite = max(ue['priorite'] for ue in ue_liste) if ue_liste else 1
+        min_priorite = min(ue['priorite'] for ue in ue_liste) if ue_liste else 0
         
         # Séparateur
         separator = ctk.CTkLabel(
@@ -552,7 +568,7 @@ class RevisionApp(ctk.CTk):
         
         # Afficher chaque UE
         for ue in ue_liste:
-            result_frame = ResultFrame(scroll, ue, max_priorite)
+            result_frame = ResultFrame(scroll, ue, max_priorite, min_priorite)
             result_frame.pack(fill="x", padx=10, pady=8)
         
         # Conseils
@@ -580,59 +596,70 @@ class RevisionApp(ctk.CTk):
         conseil_text.pack(anchor="w", padx=15, pady=(0, 10))
     
     def generer_planning(self, ue_liste):
-        """Génère un planning de révision avec alternance des matières"""
+        """Génère un planning de révision avec alternance randomisée des matières"""
         planning = []
-        sessions_restantes = []
+        sessions_par_ue = {}
         
-        # Créer une liste de toutes les sessions pour chaque UE
+        # Créer une liste de sessions pour chaque UE
         for ue in ue_liste:
-            for _ in range(ue['nb_sessions']):
-                sessions_restantes.append({
-                    'ue_nom': ue['nom'],
-                    'ue_priorite': ue['priorite'],
-                    'ue_rang': ue['rang']
-                })
+            sessions_par_ue[ue['nom']] = {
+                'restantes': ue['nb_sessions'],
+                'priorite': ue['priorite']
+            }
         
-        # Trier par priorité décroissante
-        sessions_restantes.sort(key=lambda x: x['ue_priorite'], reverse=True)
-        
-        # Alterner les matières
-        dernier_ue = None
-        while sessions_restantes:
-            # Essayer de trouver une UE différente de la dernière
-            trouve = False
-            for i, session in enumerate(sessions_restantes):
-                if session['ue_nom'] != dernier_ue:
-                    planning.append({
-                        'ue_nom': session['ue_nom'],
-                        'ue_priorite': session['ue_priorite'],
-                        'couleur': self.get_color_for_priority_planning(session['ue_priorite'], ue_liste)
-                    })
-                    dernier_ue = session['ue_nom']
-                    sessions_restantes.pop(i)
-                    trouve = True
-                    break
+        # Générer le planning avec alternance intelligente
+        while any(data['restantes'] > 0 for data in sessions_par_ue.values()):
+            # Liste des UE disponibles (avec sessions restantes)
+            ue_disponibles = [nom for nom, data in sessions_par_ue.items() if data['restantes'] > 0]
             
-            # Si on ne trouve pas d'UE différente, prendre la première disponible
-            if not trouve and sessions_restantes:
-                session = sessions_restantes.pop(0)
-                planning.append({
-                    'ue_nom': session['ue_nom'],
-                    'ue_priorite': session['ue_priorite'],
-                    'couleur': self.get_color_for_priority_planning(session['ue_priorite'], ue_liste)
-                })
-                dernier_ue = session['ue_nom']
+            if not ue_disponibles:
+                break
+            
+            # Exclure la dernière UE utilisée si possible
+            if len(planning) > 0 and len(ue_disponibles) > 1:
+                dernier_ue = planning[-1]['ue_nom']
+                ue_candidates = [nom for nom in ue_disponibles if nom != dernier_ue]
+                
+                # Si on peut éviter la répétition, on le fait
+                if ue_candidates:
+                    ue_disponibles = ue_candidates
+            
+            # Choisir aléatoirement parmi les UE disponibles
+            # Avec un biais vers les UE prioritaires (pondération par priorité)
+            poids = [sessions_par_ue[nom]['priorite'] ** 1.5 for nom in ue_disponibles]
+            total_poids = sum(poids)
+            
+            if total_poids > 0:
+                proba = [p / total_poids for p in poids]
+                ue_choisie = random.choices(ue_disponibles, weights=proba)[0]
+            else:
+                ue_choisie = random.choice(ue_disponibles)
+            
+            # Ajouter la session au planning
+            planning.append({
+                'ue_nom': ue_choisie,
+                'ue_priorite': sessions_par_ue[ue_choisie]['priorite'],
+                'couleur': self.get_color_for_priority_planning(
+                    sessions_par_ue[ue_choisie]['priorite'], 
+                    ue_liste
+                )
+            })
+            
+            # Décrémenter le nombre de sessions restantes
+            sessions_par_ue[ue_choisie]['restantes'] -= 1
         
         return planning
     
     def get_color_for_priority_planning(self, priorite, ue_liste):
-        """Calcule la couleur pour le planning"""
+        """Calcule la couleur pour le planning avec contraste local"""
         max_priorite = max(ue['priorite'] for ue in ue_liste) if ue_liste else 1
+        min_priorite = min(ue['priorite'] for ue in ue_liste) if ue_liste else 0
         
-        if max_priorite == 0:
-            ratio = 0
+        if max_priorite == min_priorite:
+            ratio = 0.5
         else:
-            ratio = priorite / max_priorite
+            # Normaliser entre 0 et 1 en fonction du min et max RÉELS
+            ratio = (priorite - min_priorite) / (max_priorite - min_priorite)
         
         # Interpolation de bleu (#2E86AB) à rouge foncé (#A4031F)
         r = int(46 + (164 - 46) * ratio)
