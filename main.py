@@ -362,6 +362,7 @@ class RevisionApp(ctk.CTk):
         """Répartit les heures proportionnellement aux scores de priorité"""
         somme_priorites = sum(ue['priorite'] for ue in ue_liste)
         temps_supplementaire = 0
+        DUREE_SESSION = 45  # Durée d'une session Pomodoro en minutes
         
         if somme_priorites == 0:
             # Si toutes les priorités sont à 0, répartir équitablement
@@ -370,6 +371,9 @@ class RevisionApp(ctk.CTk):
                 heures_exactes = heures_par_ue
                 heures_arrondies = math.ceil(heures_exactes)
                 ue['heures_recommandees'] = heures_arrondies
+                # Calculer le nombre de sessions
+                ue['nb_sessions'] = math.ceil((heures_arrondies * 60) / DUREE_SESSION)
+                ue['duree_session'] = DUREE_SESSION
                 temps_supplementaire += (heures_arrondies - heures_exactes)
         else:
             # Répartir proportionnellement aux priorités
@@ -377,6 +381,9 @@ class RevisionApp(ctk.CTk):
                 heures_exactes = (ue['priorite'] / somme_priorites) * heures_totales
                 heures_arrondies = math.ceil(heures_exactes)
                 ue['heures_recommandees'] = heures_arrondies
+                # Calculer le nombre de sessions
+                ue['nb_sessions'] = math.ceil((heures_arrondies * 60) / DUREE_SESSION)
+                ue['duree_session'] = DUREE_SESSION
                 temps_supplementaire += (heures_arrondies - heures_exactes)
         
         return round(temps_supplementaire, 1)
@@ -419,7 +426,7 @@ class RevisionApp(ctk.CTk):
         """Affiche les résultats dans une nouvelle fenêtre"""
         result_window = ctk.CTkToplevel(self)
         result_window.title("🎯 Résultats - Priorités de Révision")
-        result_window.geometry("900x650")
+        result_window.geometry("1100x700")
         
         # En-tête
         header = ctk.CTkFrame(result_window, fg_color="transparent")
@@ -456,8 +463,92 @@ class RevisionApp(ctk.CTk):
         scroll = ctk.CTkScrollableFrame(result_window)
         scroll.pack(fill="both", expand=True, padx=20, pady=10)
         
+        # PLANNING DE RÉVISION
+        planning_frame = ctk.CTkFrame(scroll, fg_color=("#f0f0f0", "#1e1e1e"), corner_radius=10)
+        planning_frame.pack(fill="x", padx=10, pady=(0, 20))
+        
+        planning_title = ctk.CTkLabel(
+            planning_frame,
+            text="📅 Planning de Révision Optimisé (Alternance des matières)",
+            font=("Roboto", 16, "bold")
+        )
+        planning_title.pack(padx=15, pady=(15, 10))
+        
+        # Générer le planning
+        planning = self.generer_planning(ue_liste)
+        
+        # Conteneur pour les sessions
+        sessions_container = ctk.CTkFrame(planning_frame, fg_color="transparent")
+        sessions_container.pack(fill="x", padx=15, pady=(0, 15))
+        
+        # Afficher les sessions par colonnes
+        current_row = 0
+        current_col = 0
+        max_cols = 4
+        
+        for i, session in enumerate(planning):
+            ue_nom = session['ue_nom']
+            ue_priorite = session['ue_priorite']
+            couleur = session['couleur']
+            
+            session_frame = ctk.CTkFrame(
+                sessions_container,
+                fg_color=couleur,
+                corner_radius=8,
+                width=250,
+                height=60
+            )
+            session_frame.grid(row=current_row, column=current_col, padx=5, pady=5, sticky="ew")
+            session_frame.grid_propagate(False)
+            
+            session_num = ctk.CTkLabel(
+                session_frame,
+                text=f"Session {i+1}",
+                font=("Roboto", 10, "bold"),
+                text_color="white"
+            )
+            session_num.pack(anchor="w", padx=10, pady=(8, 0))
+            
+            session_ue = ctk.CTkLabel(
+                session_frame,
+                text=ue_nom,
+                font=("Roboto", 12, "bold"),
+                text_color="white"
+            )
+            session_ue.pack(anchor="w", padx=10, pady=(0, 2))
+            
+            session_time = ctk.CTkLabel(
+                session_frame,
+                text=f"45 min • Pause 5-10 min",
+                font=("Roboto", 9),
+                text_color="white"
+            )
+            session_time.pack(anchor="w", padx=10, pady=(0, 8))
+            
+            current_col += 1
+            if current_col >= max_cols:
+                current_col = 0
+                current_row += 1
+        
         # Trouver la priorité max
         max_priorite = max(ue['priorite'] for ue in ue_liste) if ue_liste else 1
+        
+        # Séparateur
+        separator = ctk.CTkLabel(
+            scroll,
+            text="───────────────────────────────────────────",
+            font=("Roboto", 10),
+            text_color="gray"
+        )
+        separator.pack(pady=10)
+        
+        # Titre des résumés UE
+        resume_title = ctk.CTkLabel(
+            scroll,
+            text="📊 Résumé par UE",
+            font=("Roboto", 16, "bold")
+        )
+        resume_title.pack(pady=(10, 15))
         
         # Afficher chaque UE
         for ue in ue_liste:
@@ -470,21 +561,85 @@ class RevisionApp(ctk.CTk):
         
         conseil_title = ctk.CTkLabel(
             conseil_frame,
-            text="💡 Conseil",
+            text="💡 Conseils de Révision Efficace",
             font=("Roboto", 12, "bold")
         )
         conseil_title.pack(anchor="w", padx=15, pady=(10, 5))
         
         conseil_text = ctk.CTkLabel(
             conseil_frame,
-            text=f"Concentrez votre temps de révision sur les UE en rouge/orange (scores élevés).\n"
-                 f"Les heures sont arrondies au supérieur pour chaque UE.\n"
-                 f"⚠️ Temps supplémentaire nécessaire : +{temps_supplementaire}h (dû aux arrondis)\n"
-                 f"N'oubliez pas de faire des pauses régulières ! 🎓",
-            font=("Roboto", 11),
+            text=f"🍅 Méthode Pomodoro : 45 min de travail intense + 5-10 min de pause\n"
+                 f"🔄 Alternance : Ne révisez jamais une seule matière par jour (optimise la mémoire)\n"
+                 f"📝 Pratique Active : Faites des annales, QCM, exercices (surtout pour les UE à lacunes)\n"
+                 f"🗣️ Auto-Explication : Expliquez les concepts à voix haute comme si vous enseigniez\n"
+                 f"🔁 Répétition Espacée : Revoyez les points clés à intervalles (1h, 1 jour, 3 jours)\n"
+                 f"⚠️ Temps supplémentaire nécessaire : +{temps_supplementaire}h (dû aux arrondis)",
+            font=("Roboto", 10),
             justify="left"
         )
         conseil_text.pack(anchor="w", padx=15, pady=(0, 10))
+    
+    def generer_planning(self, ue_liste):
+        """Génère un planning de révision avec alternance des matières"""
+        planning = []
+        sessions_restantes = []
+        
+        # Créer une liste de toutes les sessions pour chaque UE
+        for ue in ue_liste:
+            for _ in range(ue['nb_sessions']):
+                sessions_restantes.append({
+                    'ue_nom': ue['nom'],
+                    'ue_priorite': ue['priorite'],
+                    'ue_rang': ue['rang']
+                })
+        
+        # Trier par priorité décroissante
+        sessions_restantes.sort(key=lambda x: x['ue_priorite'], reverse=True)
+        
+        # Alterner les matières
+        dernier_ue = None
+        while sessions_restantes:
+            # Essayer de trouver une UE différente de la dernière
+            trouve = False
+            for i, session in enumerate(sessions_restantes):
+                if session['ue_nom'] != dernier_ue:
+                    planning.append({
+                        'ue_nom': session['ue_nom'],
+                        'ue_priorite': session['ue_priorite'],
+                        'couleur': self.get_color_for_priority_planning(session['ue_priorite'], ue_liste)
+                    })
+                    dernier_ue = session['ue_nom']
+                    sessions_restantes.pop(i)
+                    trouve = True
+                    break
+            
+            # Si on ne trouve pas d'UE différente, prendre la première disponible
+            if not trouve and sessions_restantes:
+                session = sessions_restantes.pop(0)
+                planning.append({
+                    'ue_nom': session['ue_nom'],
+                    'ue_priorite': session['ue_priorite'],
+                    'couleur': self.get_color_for_priority_planning(session['ue_priorite'], ue_liste)
+                })
+                dernier_ue = session['ue_nom']
+        
+        return planning
+    
+    def get_color_for_priority_planning(self, priorite, ue_liste):
+        """Calcule la couleur pour le planning"""
+        max_priorite = max(ue['priorite'] for ue in ue_liste) if ue_liste else 1
+        
+        if max_priorite == 0:
+            ratio = 0
+        else:
+            ratio = priorite / max_priorite
+        
+        # Interpolation de bleu (#2E86AB) à rouge foncé (#A4031F)
+        r = int(46 + (164 - 46) * ratio)
+        g = int(134 + (3 - 134) * ratio)
+        b = int(171 + (31 - 171) * ratio)
+        
+        return f"#{r:02x}{g:02x}{b:02x}"
 
 
 if __name__ == "__main__":
