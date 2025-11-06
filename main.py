@@ -672,3 +672,8 @@ class RevisionApp(ctk.CTk):
 if __name__ == "__main__":
     app = RevisionApp()
     app.mainloop()
+    
+#TODO 
+        """
+        ajouter une répartition en jours et ajouts de pause visibles dans le planning peut etre mieux à voir
+        """
