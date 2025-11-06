@@ -40,7 +40,7 @@ class TooltipLabel(ctk.CTkLabel):
     def schedule_hide_tooltip(self, event):
         """Programme la disparition du tooltip après 1 seconde"""
         if self.tooltip:
-            self.hide_job = self.after(1000, self.hide_tooltip_now)
+            self.hide_job = self.after(150, self.hide_tooltip_now)
     
     def hide_tooltip_now(self):
         """Cache immédiatement le tooltip"""
@@ -205,7 +205,7 @@ class RevisionApp(ctk.CTk):
         super().__init__()
         
         # Configuration de la fenêtre
-        self.title("📚 Gestionnaire de Priorités de Révision")
+        self.title("Gestionnaire de Priorités de Révision")
         self.geometry("1000x750")
         
         # Thème
@@ -225,7 +225,7 @@ class RevisionApp(ctk.CTk):
         
         title = ctk.CTkLabel(
             header,
-            text="📚 Gestionnaire de Priorités de Révision",
+            text="Gestionnaire de Priorités de Révision",
             font=("Roboto", 28, "bold")
         )
         title.pack()
@@ -239,7 +239,7 @@ class RevisionApp(ctk.CTk):
         subtitle.pack(pady=(5, 0))
         
         # Frame de saisie (scrollable)
-        self.scroll_frame = ctk.CTkScrollableFrame(self, label_text="📝 Vos UE à réviser")
+        self.scroll_frame = ctk.CTkScrollableFrame(self, label_text="Vos UE à réviser")
         self.scroll_frame.pack(fill="both", expand=True, padx=20, pady=10)
         
         # Nombre d'UE et heures disponibles
@@ -292,7 +292,7 @@ class RevisionApp(ctk.CTk):
         # Bouton de calcul
         calc_btn = ctk.CTkButton(
             self,
-            text="🎯 Calculer les priorités",
+            text="Calculer les priorités",
             command=self.calculer_priorites,
             height=40,
             font=("Roboto", 14, "bold")
